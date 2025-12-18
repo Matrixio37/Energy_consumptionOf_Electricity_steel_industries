@@ -5,12 +5,13 @@ import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime, timedelta
-
+from prophet import Prophet 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 
-# PAGE CONFIGURATION
+  
 
+# PAGE CONFIGURATION
 st.set_page_config(
     page_title="Steel Plant Energy Analytics Dashboard",
     layout="wide",
@@ -18,85 +19,48 @@ st.set_page_config(
 )
 
 # GLOBAL CONSTANTS
-
-DATA_FILE = "steel_plant_3_years_weather_extended.csv"
+DATA_FILE = "steel_plant_weather_2020_2025_expanded.csv"
 MODEL_FILE = "model.pkl"
 
 # UTILITY FUNCTIONS
-
 def show_section_header(title):
-    """
-    Utility function to display section headers
-    consistently across the dashboard.
-    """
     st.markdown(f"## {title}")
     st.markdown("---")
 
-
 def format_metric(value):
-    """
-    Format numerical metrics for clean display.
-    """
     return f"{value:,.2f}"
 
-
 # LOAD MACHINE LEARNING MODEL
-
 @st.cache_resource
 def load_model():
-    """
-    Loads the trained ML pipeline from disk.
-    The pipeline includes preprocessing and model.
-    """
     with open(MODEL_FILE, "rb") as f:
         model = pickle.load(f)
     return model
 
 # LOAD DATASET
-
 @st.cache_data
 def load_data():
-    """
-    Loads historical energy dataset and performs
-    basic preprocessing like date parsing and sorting.
-    """
     df = pd.read_csv(DATA_FILE)
     df["Date"] = pd.to_datetime(df["Date"])
     df = df.sort_values("Date")
     return df
 
-
 # FEATURE ENGINEERING
-
 def add_time_features(df):
-    """
-    Extracts time-based features from Date column.
-    These features help the ML model learn seasonality.
-    """
     df["Year"] = df["Date"].dt.year
     df["Month"] = df["Date"].dt.month
     df["Day"] = df["Date"].dt.day
     df["DayOfWeek"] = df["Date"].dt.dayofweek
     return df
 
-
 def add_energy_kpis(df):
-    """
-    Adds domain-specific KPIs such as
-    energy intensity per ton of production.
-    """
     df["Energy_per_Ton"] = (
         df["Electricity_Consumption_MWh"] / df["Production_Tons"]
     ).round(3)
     return df
 
-
 # DATA QUALITY CHECKS
-
 def data_quality_report(df):
-    """
-    Generates data quality indicators.
-    """
     report = {
         "Total Records": len(df),
         "Missing Values": int(df.isnull().sum().sum()),
@@ -105,19 +69,11 @@ def data_quality_report(df):
     }
     return report
 
-
-# FUTURE PREDICTION LOGIC
-
+# RANDOM FOREST FUTURE PREDICTION LOGIC
 def predict_future_energy(model, days, scenario="Normal"):
-    """
-    Predicts future electricity consumption based on
-    selected scenario assumptions.
-    """
-
     today = datetime.today()
     future_dates = [today + timedelta(days=i) for i in range(1, days + 1)]
 
-    # Scenario adjustments
     if scenario == "High Production":
         prod_range = (600, 700)
         temp_range = (30, 42)
@@ -150,9 +106,7 @@ def predict_future_energy(model, days, scenario="Normal"):
 
     return result
 
-
 # LOAD DATA & MODEL
-
 df = load_data()
 df = add_time_features(df)
 df = add_energy_kpis(df)
@@ -160,15 +114,13 @@ df = add_energy_kpis(df)
 model = load_model()
 
 # TITLE & INTRODUCTION
-
 st.title("Steel Plant Electricity Consumption Analytics Dashboard")
 
 st.markdown("""
 ### Project Overview
 
-This dashboard is developed as part of the **Energy Conservation Analysis and Prediction** project.
-It analyzes historical electricity consumption data of a steel plant and predicts future energy
-requirements using **Machine Learning (Random Forest Regression)**.
+This dashboard analyzes historical electricity consumption of a steel plant and predicts future energy
+requirements using **Random Forest Regression** and **Facebook Prophet**.
 
 The goal is to assist decision-makers in:
 - Understanding consumption patterns
@@ -177,7 +129,6 @@ The goal is to assist decision-makers in:
 """)
 
 # SIDEBAR CONTROLS
-
 st.sidebar.header("Control Panel")
 
 selected_years = st.sidebar.multiselect(
@@ -193,7 +144,7 @@ selected_shifts = st.sidebar.multiselect(
 )
 
 scenario = st.sidebar.selectbox(
-    "Prediction Scenario",
+    "Random Forest Scenario",
     ["Normal", "High Production", "Low Production"]
 )
 
@@ -211,18 +162,15 @@ filtered_df = df[
 ]
 
 # TABS
-
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Data Overview",
     "Trend Analysis",
     "Statistical Analysis",
     "Model Performance",
-    "Future Prediction",
-    "Assumptions & Limitations"
+    "Future Prediction"
 ])
 
 # TAB 1: DATA OVERVIEW
-
 with tab1:
     show_section_header("Dataset Snapshot")
     st.dataframe(filtered_df.head(300))
@@ -233,7 +181,6 @@ with tab1:
         st.write(f"**{k}:** {v}")
 
 # TAB 2: TREND ANALYSIS
-
 with tab2:
     show_section_header("Electricity Consumption Trend")
     st.line_chart(filtered_df.set_index("Date")["Electricity_Consumption_MWh"])
@@ -242,7 +189,6 @@ with tab2:
     st.line_chart(filtered_df.set_index("Date")[["Production_Tons", "Electricity_Consumption_MWh"]])
 
 # TAB 3: STATISTICAL ANALYSIS
-
 with tab3:
     show_section_header("Descriptive Statistics")
     st.dataframe(filtered_df.describe())
@@ -286,38 +232,28 @@ with tab4:
 # TAB 5: FUTURE PREDICTION
 
 with tab5:
-    show_section_header("Future Energy Consumption Forecast")
+    show_section_header("Future Prediction (Random Forest Scenario-Based)")
+    rf_future = predict_future_energy(model, prediction_days, scenario)
+    st.dataframe(rf_future)
+    st.line_chart(rf_future.set_index("Date")["Predicted_Energy_MWh"])
 
-    future_df = predict_future_energy(
-        model=model,
-        days=prediction_days,
-        scenario=scenario
+    show_section_header("Future Prediction (Prophet Time-Series Model)")
+
+    df_prophet = df[["Date", "Electricity_Consumption_MWh"]].copy()
+    df_prophet.columns = ["ds", "y"]
+
+    prophet_model = Prophet(
+        yearly_seasonality=True,
+        weekly_seasonality=True,
+        daily_seasonality=False
     )
+    prophet_model.fit(df_prophet)
 
-    st.dataframe(future_df)
-    st.line_chart(future_df.set_index("Date")["Predicted_Energy_MWh"])
+    future = prophet_model.make_future_dataframe(periods=prediction_days)
+    forecast = prophet_model.predict(future)
 
-    csv = future_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Download Forecast CSV",
-        csv,
-        "future_energy_forecast.csv",
-        "text/csv"
-    )
+    result = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(prediction_days)
+    result.columns = ["Date", "Predicted_MWh", "Lower_Bound", "Upper_Bound"]
 
-# TAB 6: ASSUMPTIONS & LIMITATIONS
-
-with tab6:
-    show_section_header("Assumptions")
-    st.markdown("""
-    - Future production and weather data are assumed using realistic ranges
-    - Equipment efficiency is assumed constant
-    - No major policy or infrastructure changes are considered
-    """)
-
-    show_section_header("Limitations")
-    st.markdown("""
-    - Predictions depend on historical patterns
-    - Sudden breakdowns or extreme weather are not modeled
-    - Real-time sensor data is not integrated
-    """)
+    st.dataframe(result)
+    st.line_chart(result.set_index("Date")[["Predicted_MWh"]])
