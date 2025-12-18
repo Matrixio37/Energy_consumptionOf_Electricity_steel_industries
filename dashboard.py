@@ -19,7 +19,7 @@ st.set_page_config(
 )
 
 # GLOBAL CONSTANTS
-DATA_FILE = "steel_plant_2_years_weather.csv"
+DATA_FILE = "steel_plant_weather_2020_2025_expanded.csv"
 MODEL_FILE = "model.pkl"
 
 # UTILITY FUNCTIONS
