@@ -138,9 +138,9 @@ with tab2:
 
     st.subheader("Temperature Trend")
 
-    if "Temperature_Celsius" in df.columns:
+    if "Temperature_C" in df.columns:
         fig_temp, ax_temp = plt.subplots(figsize=(10, 4))
-        ax_temp.plot(df["Date"], df["Temperature_Celsius"], marker="o")
+        ax_temp.plot(df["Date"], df["Temperature_C"], marker="o")
         ax_temp.set_xlabel("Date")
         ax_temp.set_ylabel("Temperature (°C)")
         ax_temp.set_title("Temperature Over Time")
